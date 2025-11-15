@@ -23,6 +23,7 @@ const App: React.FC = () => {
     const { isAuthenticated, isOnboarded, loading, userProfile } = useAppContext();
     const { theme } = useTheme();
     const [isSidebarOpen, setSidebarOpen] = useState(false);
+    const [flash, setFlash] = useState<string | null>(null);
 
     useEffect(() => {
         document.documentElement.className = theme;
@@ -33,6 +34,20 @@ const App: React.FC = () => {
         const name = userProfile?.name || 'Charan';
         document.title = `${name}'s Wealth Tracker`;
     }, [userProfile?.name]);
+
+    // Show flash banner after certain auth transitions (e.g., PIN recovery)
+    useEffect(() => {
+        if (!isAuthenticated) return;
+        try {
+            const msg = localStorage.getItem('zenith-flash');
+            if (msg) {
+                setFlash(msg);
+                localStorage.removeItem('zenith-flash');
+                const t = setTimeout(() => setFlash(null), 3000);
+                return () => clearTimeout(t);
+            }
+        } catch {}
+    }, [isAuthenticated]);
 
     const toggleSidebar = useCallback(() => {
         setSidebarOpen(prev => !prev);
@@ -57,6 +72,13 @@ const App: React.FC = () => {
     return (
         <HashRouter>
             <div className={`flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans`}>
+                {flash && (
+                    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50">
+                        <div className="px-4 py-2 bg-emerald-600 text-white rounded-lg shadow-lg">
+                            {flash}
+                        </div>
+                    </div>
+                )}
                 <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <header className="md:hidden flex justify-between items-center p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">

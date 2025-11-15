@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { AppData } from '../types';
 
@@ -6,8 +6,12 @@ const Onboarding: React.FC = () => {
     const [step, setStep] = useState(1);
     const [name, setName] = useState('');
     const [pin, setPin] = useState('');
+    const [showPin, setShowPin] = useState(false);
     const [confirmPin, setConfirmPin] = useState('');
+    const [showConfirmPin, setShowConfirmPin] = useState(false);
     const [age, setAge] = useState('');
+    const [recoveryKey, setRecoveryKey] = useState('');
+    const [recoverySaved, setRecoverySaved] = useState(false);
     const { completeOnboarding } = useAppContext();
 
     const [nameError, setNameError] = useState('');
@@ -23,6 +27,23 @@ const Onboarding: React.FC = () => {
     };
     const handleBack = () => setStep(s => s - 1);
 
+    // Generate recovery key when user reaches step 3 (if not already generated)
+    useEffect(() => {
+        if (step === 3 && !recoveryKey) {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            const part = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+            const key = `${part(4)}-${part(4)}-${part(4)}-${part(4)}`;
+            setRecoveryKey(key);
+        }
+    }, [step, recoveryKey]);
+
+    // Simple helper to generate a human-readable recovery key (e.g., ABCD-EFGH-1234-5678)
+    const generateRecoveryKey = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        const part = (n: number) => Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        return `${part(4)}-${part(4)}-${part(4)}-${part(4)}`;
+    };
+
     const handleSubmit = async () => {
         if (pin.length < 4) {
             alert('PIN must be at least 4 characters.');
@@ -32,6 +53,9 @@ const Onboarding: React.FC = () => {
             alert('PINs do not match.');
             return;
         }
+
+        const key = recoveryKey || generateRecoveryKey();
+        if (!recoveryKey) setRecoveryKey(key);
 
         const data: AppData = {
             transactions: [],
@@ -50,10 +74,11 @@ const Onboarding: React.FC = () => {
                 name: name.trim() || 'User',
                 age: age ? parseInt(age, 10) : null 
             },
+            auth: { recoveryHash: null },
             chatHistory: [],
         };
 
-    await completeOnboarding(data, pin, age ? parseInt(age, 10) : null, name.trim() || 'User');
+    await completeOnboarding(data, pin, age ? parseInt(age, 10) : null, name.trim() || 'User', key);
     };
 
     const renderStep = () => {
@@ -208,28 +233,46 @@ const Onboarding: React.FC = () => {
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">
                                     Create PIN (minimum 4 characters)
                                 </label>
-                                <input
-                                    type="password"
-                                    value={pin}
-                                    onChange={(e) => setPin(e.target.value)}
-                                    className="w-full px-6 py-4 text-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-600 focus:border-green-500 dark:focus:border-green-400 rounded-xl outline-none transition-all shadow-sm focus:shadow-md font-mono tracking-wider"
-                                    placeholder="••••"
-                                    maxLength={8}
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showPin ? 'text' : 'password'}
+                                        value={pin}
+                                        onChange={(e) => setPin(e.target.value)}
+                                        className="w-full px-6 pr-16 py-4 text-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-600 focus:border-green-500 dark:focus:border-green-400 rounded-xl outline-none transition-all shadow-sm focus:shadow-md font-mono tracking-wider"
+                                        placeholder="••••"
+                                        maxLength={8}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPin((s) => !s)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600 dark:text-gray-300 hover:text-green-600"
+                                    >
+                                        {showPin ? 'Hide' : 'Show'}
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200">
                                     Confirm PIN
                                 </label>
-                                <input
-                                    type="password"
-                                    value={confirmPin}
-                                    onChange={(e) => setConfirmPin(e.target.value)}
-                                    className="w-full px-6 py-4 text-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-600 focus:border-green-500 dark:focus:border-green-400 rounded-xl outline-none transition-all shadow-sm focus:shadow-md font-mono tracking-wider"
-                                    placeholder="••••"
-                                    maxLength={8}
-                                />
+                                <div className="relative">
+                                    <input
+                                        type={showConfirmPin ? 'text' : 'password'}
+                                        value={confirmPin}
+                                        onChange={(e) => setConfirmPin(e.target.value)}
+                                        className="w-full px-6 pr-16 py-4 text-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white border-2 border-gray-200 dark:border-gray-600 focus:border-green-500 dark:focus:border-green-400 rounded-xl outline-none transition-all shadow-sm focus:shadow-md font-mono tracking-wider"
+                                        placeholder="••••"
+                                        maxLength={8}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPin((s) => !s)}
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-600 dark:text-gray-300 hover:text-green-600"
+                                    >
+                                        {showConfirmPin ? 'Hide' : 'Show'}
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Security Info */}
@@ -240,7 +283,44 @@ const Onboarding: React.FC = () => {
                                     </svg>
                                     <div className="text-sm text-green-700 dark:text-green-300">
                                         <p className="font-semibold">Your PIN is encrypted and stored locally</p>
-                                        <p className="text-xs mt-1">We never send your PIN to any server. It stays on your device only.</p>
+                                        <p className="text-xs mt-1">We never send your PIN to any server. Save your recovery key to reset PIN without losing data.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Recovery Key */}
+                            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4">
+                                <div className="flex items-start gap-3">
+                                    <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M10 2a4 4 0 00-4 4v2H5a3 3 0 000 6h1v1a3 3 0 006 0v-1h1a3 3 0 000-6h-1V6a4 4 0 00-4-4z" />
+                                    </svg>
+                                    <div className="flex-1">
+                                        <p className="font-semibold text-indigo-700 dark:text-indigo-300">Your Recovery Key</p>
+                                        <p className="text-xs text-indigo-800/80 dark:text-indigo-200/80 mt-1">Save this key safely. You can reset your PIN later without deleting your data.</p>
+                                        <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                            <div className="flex-1">
+                                                <div className="font-mono text-center text-lg px-4 py-3 bg-white/80 dark:bg-gray-800/70 rounded-lg border border-indigo-200 dark:border-indigo-800 select-all">
+                                                    {recoveryKey || '••••-••••-••••-••••'}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button type="button" onClick={() => { if (recoveryKey) navigator.clipboard.writeText(recoveryKey); }} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm">Copy</button>
+                                                <button type="button" onClick={() => {
+                                                    if (!recoveryKey) return;
+                                                    const blob = new Blob([`Recovery Key: ${recoveryKey}`], { type: 'text/plain' });
+                                                    const url = URL.createObjectURL(blob);
+                                                    const a = document.createElement('a');
+                                                    a.href = url;
+                                                    a.download = 'wealth-tracker-recovery-key.txt';
+                                                    a.click();
+                                                    URL.revokeObjectURL(url);
+                                                }} className="px-3 py-2 bg-white dark:bg-gray-700 border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm">Download</button>
+                                            </div>
+                                        </div>
+                                        <label className="mt-3 flex items-center gap-2 text-xs text-indigo-800/80 dark:text-indigo-300/80 cursor-pointer">
+                                            <input type="checkbox" className="w-4 h-4" checked={recoverySaved} onChange={(e)=> setRecoverySaved(e.target.checked)} />
+                                            I confirm I've saved the recovery key.
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -255,7 +335,8 @@ const Onboarding: React.FC = () => {
                             </button>
                             <button 
                                 onClick={handleSubmit} 
-                                className="flex-1 py-3 px-6 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all"
+                                disabled={!recoverySaved}
+                                className={`flex-1 py-3 px-6 ${recoverySaved ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700' : 'bg-gray-300 dark:bg-gray-600'} text-white font-bold rounded-xl shadow-lg ${recoverySaved ? 'hover:shadow-xl transform hover:scale-105' : ''} transition-all disabled:opacity-60`}
                             >
                                 Complete Setup ✓
                             </button>
