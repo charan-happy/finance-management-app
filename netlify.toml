@@ -1,0 +1,43 @@
+# Netlify Configuration
+# https://docs.netlify.com/configure-builds/file-based-configuration/
+
+[build]
+  # Build command
+  command = "npm run build"
+  
+  # Output directory
+  publish = "dist"
+  
+  # Functions directory for serverless functions
+  functions = "netlify/functions"
+
+[build.environment]
+  # Node version
+  NODE_VERSION = "20"
+
+# Redirects for SPA (Single Page Application)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers for security
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    X-XSS-Protection = "1; mode=block"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Environment variables (configure in Netlify UI or CLI)
+# Required environment variables:
+# - VITE_DATABASE_URL
+# - VITE_DATA_MODE
+# - VITE_USE_MOCK_BROKER
+# - VITE_UPSTOX_CLIENT_ID (optional)
+# - VITE_UPSTOX_CLIENT_SECRET (optional)
+# - VITE_ANGELONE_CLIENT_ID (optional)
+# - VITE_ANGELONE_CLIENT_SECRET (optional)
+# - VITE_FYERS_CLIENT_ID (optional)
+# - VITE_FYERS_CLIENT_SECRET (optional)

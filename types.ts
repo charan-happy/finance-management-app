@@ -71,7 +71,12 @@ export interface Broker {
 }
 
 export interface UserProfile {
+    name: string;
     age: number | null;
+}
+
+export interface AuthInfo {
+    recoveryHash: string | null;
 }
 
 export interface AppData {
@@ -84,6 +89,7 @@ export interface AppData {
     brokers: Broker[];
     geminiApiKey: string;
     userProfile: UserProfile;
+    auth: AuthInfo;
     chatHistory: ChatMessage[];
 }
 

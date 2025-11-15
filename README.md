@@ -1,57 +1,170 @@
 # Charan's Wealth Tracker
 
-This is a comprehensive, self-hosted personal finance tracker with dashboards, goal planning, and an AI assistant.
+A comprehensive, self-hosted personal finance tracker with dashboards, goal planning, broker integrations, and an AI assistant.
 
-## Production-Ready Setup
+## ✨ Features
 
-This application has been configured with a professional build system (Vite) and a Dockerfile to make it production-ready and easy to deploy.
+- 📊 **Comprehensive Dashboard** - Track income, expenses, investments, and net worth
+- 💰 **Transaction Management** - Categorize and track all your financial transactions
+- 🎯 **Goal Planning** - Set and monitor financial goals
+- 📈 **Investment Tracking** - Manage investment wishlist and portfolio
+- 🏦 **Broker Integration** - Sync holdings from Upstox, AngelOne, and Fyers
+- 💳 **Debt Management** - Track and manage your debts
+- 🤖 **AI Assistant** - Powered by Google Gemini for financial advice
+- 📱 **Responsive Design** - Works on desktop, tablet, and mobile
+- 🌙 **Dark Mode** - Easy on the eyes
+- 🔒 **Secure** - PIN protection with local data storage
+- 💾 **Flexible Storage** - Works with both local storage and cloud database (Neon.tech)
+- ☁️ **Cloud Ready** - Deploy to Netlify, Vercel, or any cloud platform
 
-### Why the Change?
-
-The original application relied on a development-only setup where `.tsx` files were served directly to the browser. This is not suitable for a live, production environment as it's slow, insecure, and not supported by standard web servers.
-
-We've introduced a **build step** that compiles, transpiles, and bundles all the code into highly optimized, static HTML, CSS, and JavaScript files. This is the standard practice for modern web applications.
-
-## How to Run the Application
-
-You can run the application locally for development or build a production version using Docker.
+## 🚀 Quick Start
 
 ### Prerequisites
 
-You must have [Node.js](https://nodejs.org/) (version 18 or newer) and [Docker](https://www.docker.com/products/docker-desktop/) installed on your machine.
+- [Node.js](https://nodejs.org/) (version 20 or newer)
+- [Docker](https://www.docker.com/products/docker-desktop/) (optional, for containerized deployment)
 
 ### Local Development
 
-1.  **Install dependencies:**
-    Open your terminal in the project root and run:
-    ```bash
-    npm install
-    ```
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/charan-happy/finance-management-app.git
+   cd finance-management-app
+   ```
 
-2.  **Start the development server:**
-    ```bash
-    npm run dev
-    ```
-    This will start a fast development server, typically at `http://localhost:5173`.
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
 
-### Production Build with Docker
+3. **Configure environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your settings (default uses local storage)
+   ```
 
-This is the recommended way to run the application in production.
+4. **Start the development server:**
+   ```bash
+   npm run dev
+   ```
+   Open `http://localhost:5173` in your browser.
 
-1.  **Build the Docker image:**
-    From the project root, run:
-    ```bash
-    docker build -t wealth-tracker .
-    ```
-    This command will build the application and package it into a lightweight Nginx container.
+## 🔧 Configuration
 
-2.  **Run the Docker container:**
-    ```bash
-    docker run -d -p 8080:80 --name my-wealth-tracker wealth-tracker
-    ```
-    - `-d`: Runs the container in detached mode (in the background).
-    - `-p 8080:80`: Maps port 8080 on your local machine to port 80 inside the container.
-    - `--name my-wealth-tracker`: Gives your container a memorable name.
+The app supports multiple operation modes:
 
-3.  **Access the application:**
-    Open your web browser and navigate to `http://localhost:8080`. Your wealth tracker is now live!
+### Data Storage Modes
+
+- **`local`** - Uses browser localStorage only (default, no database needed)
+- **`db`** - Uses Neon.tech PostgreSQL database only
+- **`hybrid`** - Uses both database and localStorage (recommended for production)
+
+Set mode in `.env`:
+```env
+VITE_DATA_MODE=hybrid
+VITE_DATABASE_URL=postgresql://user:password@host.neon.tech/dbname?sslmode=require
+```
+
+### Broker Integration
+
+The app supports three major Indian brokers:
+
+1. **Upstox**
+2. **AngelOne** 
+3. **Fyers**
+
+#### Development Mode (Mock Data)
+```env
+VITE_USE_MOCK_BROKER=true
+```
+
+#### Production Mode (Real Broker APIs)
+```env
+VITE_USE_MOCK_BROKER=false
+VITE_UPSTOX_CLIENT_ID=your-api-key
+VITE_UPSTOX_CLIENT_SECRET=your-api-secret
+# Add credentials for other brokers similarly
+```
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed setup instructions.
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────┐
+│         React Frontend (Vite)           │
+│  ┌──────────┐ ┌──────────┐ ┌─────────┐ │
+│  │Dashboard │ │Investment│ │Settings │ │
+│  │  Pages   │ │  Pages   │ │  Pages  │ │
+│  └──────────┘ └──────────┘ └─────────┘ │
+└──────────────┬──────────────────────────┘
+               │
+    ┌──────────┴──────────┐
+    │                     │
+┌───▼────────────┐  ┌────▼──────────────┐
+│ Data Provider  │  │ Broker Service    │
+│ - Local        │  │ - Upstox          │
+│ - Neon DB      │  │ - AngelOne        │
+│ - Hybrid       │  │ - Fyers           │
+└───┬────────────┘  └───────────────────┘
+    │
+┌───▼─────────────────────┐
+│  Neon.tech PostgreSQL   │
+│  (Optional Cloud DB)    │
+└─────────────────────────┘
+```
+
+## 📦 Deployment
+
+### Netlify (Recommended)
+
+```bash
+netlify deploy --prod
+```
+
+### Vercel
+
+```bash
+vercel --prod
+```
+
+### Docker
+
+```bash
+docker build -t wealth-tracker .
+docker run -p 8080:80 wealth-tracker
+```
+
+For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+## 🗄️ Database Setup
+
+### Using Neon.tech (PostgreSQL)
+
+1. Sign up at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy the connection string
+4. Add to `.env`:
+   ```env
+   VITE_DATABASE_URL=postgresql://...
+   VITE_DATA_MODE=hybrid
+   ```
+
+The app automatically creates required tables on first run.
+
+## 🔌 Broker API Setup
+
+### Upstox
+1. Visit [Upstox Developer Portal](https://upstox.com/developer/)
+2. Create an app
+3. Get API Key and Secret
+
+### AngelOne
+1. Register at [AngelOne SmartAPI](https://smartapi.angelbroking.com/)
+2. Create app and get credentials
+
+### Fyers
+1. Login to [Fyers API Dashboard](https://myapi.fyers.in/)
+2. Create app and get Client ID and Secret
+
+Add credentials to `.env` or configure in Settings page within the app.

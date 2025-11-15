@@ -28,7 +28,7 @@ const navItems = [
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
     const { theme, toggleTheme } = useTheme();
-    const { logout } = useAppContext();
+    const { logout, userProfile } = useAppContext();
 
     const linkClass = "flex items-center px-4 py-3 text-gray-600 dark:text-gray-400 rounded-lg transition-all duration-200 ease-in-out";
     const activeLinkClass = "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg";
@@ -39,7 +39,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, toggleSidebar }) => {
             <aside className={`absolute md:relative z-40 flex flex-col w-64 h-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transform ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 transition-transform duration-300 ease-in-out`}>
                 <div className="flex items-center justify-center h-20 border-b border-gray-200 dark:border-gray-700 px-4">
                     <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500 text-center">
-                        Charan's Wealth Tracker
+                        {userProfile.name}'s Wealth Tracker
                     </h1>
                 </div>
 

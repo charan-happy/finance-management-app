@@ -20,13 +20,19 @@ import PromptHistory from './pages/PromptHistory';
 import { MenuIcon, XIcon } from './components/Icons';
 
 const App: React.FC = () => {
-    const { isAuthenticated, isOnboarded, loading } = useAppContext();
+    const { isAuthenticated, isOnboarded, loading, userProfile } = useAppContext();
     const { theme } = useTheme();
     const [isSidebarOpen, setSidebarOpen] = useState(false);
 
     useEffect(() => {
         document.documentElement.className = theme;
     }, [theme]);
+
+    // Update document title dynamically
+    useEffect(() => {
+        const name = userProfile?.name || 'Charan';
+        document.title = `${name}'s Wealth Tracker`;
+    }, [userProfile?.name]);
 
     const toggleSidebar = useCallback(() => {
         setSidebarOpen(prev => !prev);
@@ -54,7 +60,7 @@ const App: React.FC = () => {
                 <Sidebar isOpen={isSidebarOpen} toggleSidebar={toggleSidebar} />
                 <div className="flex-1 flex flex-col overflow-hidden">
                     <header className="md:hidden flex justify-between items-center p-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                        <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">Charan's Wealth Tracker</h1>
+                        <h1 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-500">{userProfile.name}'s Wealth Tracker</h1>
                         <button onClick={toggleSidebar} className="text-gray-500 dark:text-gray-400">
                             {isSidebarOpen ? <XIcon className="w-6 h-6" /> : <MenuIcon className="w-6 h-6" />}
                         </button>

@@ -1,56 +1,45 @@
-# Multi-stage Dockerfile for Vite + React + Netlify Functions (Node backend)
-# Stage 1: Build dependencies and frontend
-FROM node:20-bullseye-slim AS builder
+# Multi-stage Dockerfile for React + Vite Finance Management App
+# Optimized for production deployment with Neon database support
+
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
 WORKDIR /app
 
-# Install dependencies (prisma schema must be present before postinstall runs)
+# Copy package files
 COPY package*.json ./
 
-# Copy Prisma schema before installing so `prisma generate` (postinstall) can run
-#COPY prisma ./prisma
+# Install dependencies
 RUN npm ci
 
-# Copy source and build
+# Copy source code
 COPY . .
+
+# Build the application
 RUN npm run build
 
-# Stage 2: Production image
-FROM node:20-bullseye-slim
+# Stage 2: Production
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install only production dependencies
-COPY package*.json ./
+# Install serve to run the static files
+RUN npm install -g serve
 
-# Copy Prisma schema before running postinstall (prisma generate runs in postinstall)
-# so the schema is available during npm install.
-#COPY prisma ./prisma
-RUN npm ci --only=production
-
-# Copy node_modules from builder to make the Prisma CLI and dev tools available
-# for runtime schema push (this keeps production install but allows npx prisma to run).
-COPY --from=builder /app/node_modules ./node_modules
-
-# Copy built frontend assets from builder
+# Copy built assets from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy netlify functions
-#COPY netlify ./netlify
-
-# Copy server entry (TypeScript) so tsx can run it at container start
-#COPY server.ts ./
-
-# Expose port 3000
+# Expose port
 EXPOSE 3000
 
-# Set production environment
+# Set environment to production
 ENV NODE_ENV=production
 
-# Copy startup script and make it executable
-#COPY scripts/start.sh ./scripts/start.sh
-#RUN chmod +x ./scripts/start.sh
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Use the entrypoint script — it will run prisma db push when PRISMA_AUTO_PUSH=true
-#ENTRYPOINT ["/app/scripts/start.sh"]
-ENTRYPOINT ["npm run dev"]
+# Start the application
+CMD ["serve", "-s", "dist", "-l", "3000"]
+
 

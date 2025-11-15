@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Broker } from '../types';
 import { LightbulbIcon } from './Icons';
+import { createBrokerService } from '../services/brokerService';
+import { config } from '../services/config';
 
 interface BrokerAuthModalProps {
     broker: Broker;
@@ -37,23 +39,91 @@ const helpContent: Record<Broker['id'], { title: string, steps: string[] }> = {
 };
 
 const BrokerAuthModal: React.FC<BrokerAuthModalProps> = ({ broker, onClose }) => {
-    const { updateBrokerConnection } = useAppContext();
+    const { updateBrokerConnection, addMultipleInvestmentHoldings } = useAppContext();
     const [clientId, setClientId] = useState(broker.clientId);
     const [clientSecret, setClientSecret] = useState(broker.clientSecret);
     const [showHelp, setShowHelp] = useState(false);
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [syncing, setSyncing] = useState(false);
 
-    const handleConnect = () => {
+    // Sync state when broker props change (e.g., after data loads from storage)
+    React.useEffect(() => {
+        setClientId(broker.clientId);
+        setClientSecret(broker.clientSecret);
+    }, [broker.clientId, broker.clientSecret]);
+
+    const handleConnect = async () => {
         if (!clientId || !clientSecret) {
             setError("Please provide both Client ID and Client Secret.");
             return;
         }
+        
         setError('');
-        updateBrokerConnection(broker.id, clientId, clientSecret, true);
-        onClose();
+        setLoading(true);
+        
+        try {
+            const brokerService = createBrokerService(broker.id, config.useMockBroker);
+            
+            // Authenticate with broker
+            const authResponse = await brokerService.authenticate(clientId, clientSecret);
+            
+            // Store the access token (in production, store securely)
+            localStorage.setItem(`${broker.id}-access-token`, authResponse.accessToken);
+            if (authResponse.refreshToken) {
+                localStorage.setItem(`${broker.id}-refresh-token`, authResponse.refreshToken);
+            }
+            
+            // Update broker connection status
+            updateBrokerConnection(broker.id, clientId, clientSecret, true);
+            
+            // Optionally sync holdings immediately
+            await handleSyncHoldings(authResponse.accessToken);
+            
+            onClose();
+        } catch (err: any) {
+            setError(err.message || 'Failed to connect to broker');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSyncHoldings = async (accessToken?: string) => {
+        setSyncing(true);
+        setError('');
+        
+        try {
+            const token = accessToken || localStorage.getItem(`${broker.id}-access-token`);
+            if (!token) {
+                throw new Error('No access token available. Please connect first.');
+            }
+            
+            const brokerService = createBrokerService(broker.id, config.useMockBroker);
+            const holdings = await brokerService.fetchHoldings(token);
+            
+            console.log(`About to sync ${holdings.length} holdings from ${broker.name}:`, holdings);
+            
+            // Calculate total investment value
+            const totalValue = holdings.reduce((sum, h) => sum + (h.quantity * h.currentPrice), 0);
+            
+            // Remove existing holdings from this broker first to avoid duplicates
+            // Then add all fetched holdings in a single batch update
+            addMultipleInvestmentHoldings(holdings, broker.id);
+            
+            alert(`Successfully synced ${holdings.length} holdings from ${broker.name}!\nTotal portfolio value: ₹${totalValue.toLocaleString('en-IN')}`);
+        } catch (err: any) {
+            console.error('Sync error:', err);
+            setError(err.message || 'Failed to sync holdings');
+        } finally {
+            setSyncing(false);
+        }
     };
 
     const handleDisconnect = () => {
+        // Clear stored tokens
+        localStorage.removeItem(`${broker.id}-access-token`);
+        localStorage.removeItem(`${broker.id}-refresh-token`);
+        
         updateBrokerConnection(broker.id, '', '', false);
         onClose();
     };
@@ -104,17 +174,35 @@ const BrokerAuthModal: React.FC<BrokerAuthModalProps> = ({ broker, onClose }) =>
                 </div>
 
                 <div className="flex justify-between items-center mt-6">
-                    {broker.isConnected ? (
-                         <button onClick={handleDisconnect} className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg">
-                            Disconnect
-                        </button>
-                    ) : (<div />) /* Placeholder to keep layout consistent */}
+                    <div className="flex gap-2">
+                        {broker.isConnected && (
+                            <>
+                                <button 
+                                    onClick={() => handleSyncHoldings()} 
+                                    disabled={syncing}
+                                    className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg disabled:opacity-50"
+                                >
+                                    {syncing ? 'Syncing...' : 'Sync Holdings'}
+                                </button>
+                                <button 
+                                    onClick={handleDisconnect} 
+                                    className="px-4 py-2 bg-red-500 text-white font-semibold rounded-lg"
+                                >
+                                    Disconnect
+                                </button>
+                            </>
+                        )}
+                    </div>
                     <div className="flex gap-2">
                         <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 font-semibold rounded-lg">
                             Cancel
                         </button>
-                        <button onClick={handleConnect} className="px-4 py-2 bg-indigo-500 text-white font-semibold rounded-lg">
-                            {broker.isConnected ? 'Update' : 'Connect'}
+                        <button 
+                            onClick={handleConnect} 
+                            disabled={loading || syncing}
+                            className="px-4 py-2 bg-indigo-500 text-white font-semibold rounded-lg disabled:opacity-50"
+                        >
+                            {loading ? 'Connecting...' : broker.isConnected ? 'Update' : 'Connect'}
                         </button>
                     </div>
                 </div>

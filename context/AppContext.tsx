@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { AppData, Transaction, Debt, Goal, InvestmentWish, Budget, Broker, InvestmentHolding, ChatMessage } from '../types';
+import { createDataProvider, IDataProvider } from '../services/dataProvider';
+import { config } from '../services/config';
 
 interface AppContextType extends AppData {
     isAuthenticated: boolean;
@@ -7,7 +9,10 @@ interface AppContextType extends AppData {
     loading: boolean;
     login: (pin: string) => Promise<boolean>;
     logout: () => void;
-    completeOnboarding: (data: AppData, pin: string, age: number | null) => Promise<void>;
+    changePin: (oldPin: string, newPin: string) => Promise<boolean>;
+    resetApp: () => Promise<void>;
+    completeOnboarding: (data: AppData, pin: string, age: number | null, name: string, recoveryKey: string) => Promise<void>;
+    resetPinWithRecoveryKey: (recoveryKey: string, newPin: string) => Promise<boolean>;
     addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
     updateTransaction: (transaction: Transaction) => void;
     deleteTransaction: (transactionId: string) => void;
@@ -19,6 +24,7 @@ interface AppContextType extends AppData {
     deleteGoal: (goalId: string) => void;
     addInvestmentWish: (wish: Omit<InvestmentWish, 'id'>) => void;
     addInvestmentHolding: (holding: Omit<InvestmentHolding, 'id'>) => void;
+    addMultipleInvestmentHoldings: (holdings: Omit<InvestmentHolding, 'id'>[], brokerId?: string) => void;
     addBudget: (budget: Omit<Budget, 'id'>) => void;
     updateBudget: (budget: Budget) => void;
     deleteBudget: (budgetId: string) => void;
@@ -41,7 +47,8 @@ const initialData: AppData = {
         { id: 'fyers', name: 'Fyers', clientId: '', clientSecret: '', isConnected: false },
     ],
     geminiApiKey: '',
-    userProfile: { age: null },
+    userProfile: { name: 'User', age: null },
+    auth: { recoveryHash: null },
     chatHistory: [],
 };
 
@@ -58,29 +65,119 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
     const [isOnboarded, setIsOnboarded] = useState<boolean>(false);
     const [loading, setLoading] = useState<boolean>(true);
+    const [dataProvider] = useState<IDataProvider>(() => 
+        createDataProvider({
+            databaseUrl: config.databaseUrl,
+            mode: config.dataMode,
+        })
+    );
+    const [userId] = useState<string>(() => {
+        // Get or create a unique user ID
+        let id = localStorage.getItem('zenith-user-id');
+        if (!id) {
+            id = crypto.randomUUID();
+            localStorage.setItem('zenith-user-id', id);
+        }
+        return id;
+    });
 
     useEffect(() => {
-        try {
-            const savedData = localStorage.getItem('zenith-finance-data');
-            const pinHash = localStorage.getItem('zenith-finance-pin');
-            
-            if (pinHash) {
-                setIsOnboarded(true);
+        const initializeApp = async () => {
+            try {
+                // Initialize the data provider
+                await dataProvider.initialize();
+                
+                // Check if user is onboarded
+                const pinHash = localStorage.getItem('zenith-finance-pin');
+                if (pinHash) {
+                    setIsOnboarded(true);
+                }
+                
+                // Load data from provider
+                const savedData = await dataProvider.loadData(userId);
+                if (savedData) {
+                    // Check and update broker connection status based on stored tokens
+                    const updatedBrokers = savedData.brokers.map(broker => {
+                        const hasToken = !!localStorage.getItem(`${broker.id}-access-token`);
+                        let clientId = broker.clientId;
+                        let clientSecret = broker.clientSecret;
+                        
+                        // Load credentials from environment variables if not in saved data
+                        if (!clientId || !clientSecret) {
+                            if (broker.id === 'upstox') {
+                                clientId = config.upstox.clientId || '';
+                                clientSecret = config.upstox.clientSecret || '';
+                            } else if (broker.id === 'angelone') {
+                                clientId = config.angelone.clientId || '';
+                                clientSecret = config.angelone.clientSecret || '';
+                            } else if (broker.id === 'fyers') {
+                                clientId = config.fyers.clientId || '';
+                                clientSecret = config.fyers.clientSecret || '';
+                            }
+                        }
+                        
+                        // Mark as connected if we have both credentials and an access token
+                        const isConnected = hasToken && !!clientId && !!clientSecret;
+                        
+                        return {
+                            ...broker,
+                            clientId,
+                            clientSecret,
+                            isConnected
+                        };
+                    });
+                    
+                    setData({ ...savedData, brokers: updatedBrokers });
+                } else {
+                    // Initialize broker credentials from environment variables
+                    const updatedBrokers = initialData.brokers.map(broker => {
+                        const hasToken = !!localStorage.getItem(`${broker.id}-access-token`);
+                        let clientId = '';
+                        let clientSecret = '';
+                        
+                        // Load credentials from environment variables
+                        if (broker.id === 'upstox') {
+                            clientId = config.upstox.clientId || '';
+                            clientSecret = config.upstox.clientSecret || '';
+                        } else if (broker.id === 'angelone') {
+                            clientId = config.angelone.clientId || '';
+                            clientSecret = config.angelone.clientSecret || '';
+                        } else if (broker.id === 'fyers') {
+                            clientId = config.fyers.clientId || '';
+                            clientSecret = config.fyers.clientSecret || '';
+                        }
+                        
+                        // Mark as connected if we have both credentials and an access token
+                        const isConnected = hasToken && !!clientId && !!clientSecret;
+                        
+                        return {
+                            ...broker,
+                            clientId,
+                            clientSecret,
+                            isConnected
+                        };
+                    });
+                    
+                    setData({ ...initialData, brokers: updatedBrokers });
+                }
+            } catch (error) {
+                console.error("Failed to initialize app", error);
+            } finally {
+                setLoading(false);
             }
-            if (savedData) {
-                setData(JSON.parse(savedData));
-            }
-        } catch (error) {
-            console.error("Failed to load data from localStorage", error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+        };
 
-    const updateData = (newData: Partial<AppData>) => {
+        initializeApp();
+    }, [dataProvider, userId]);
+
+    const updateData = async (newData: Partial<AppData>) => {
         const updatedData = { ...data, ...newData };
         setData(updatedData);
-        localStorage.setItem('zenith-finance-data', JSON.stringify(updatedData));
+        
+        // Save to data provider (async, non-blocking)
+        dataProvider.saveData(userId, updatedData).catch(error => {
+            console.error('Failed to save data:', error);
+        });
     };
 
     const addTransaction = (transaction: Omit<Transaction, 'id'>) => {
@@ -147,6 +244,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateData({ investmentHoldings: [...data.investmentHoldings, newHolding] });
     };
 
+    const addMultipleInvestmentHoldings = (holdings: Omit<InvestmentHolding, 'id'>[], brokerId?: string) => {
+        // Remove existing holdings from this broker to avoid duplicates
+        const filteredHoldings = brokerId 
+            ? data.investmentHoldings.filter(h => h.brokerId !== brokerId)
+            : data.investmentHoldings;
+            
+        const newHoldings: InvestmentHolding[] = holdings.map(holding => ({
+            id: crypto.randomUUID(),
+            ...holding
+        }));
+        updateData({ investmentHoldings: [...filteredHoldings, ...newHoldings] });
+    };
+
     const addBudget = (budget: Omit<Budget, 'id'>) => {
         const newBudget: Budget = { id: crypto.randomUUID(), ...budget };
         updateData({ budgets: [...data.budgets, newBudget] });
@@ -186,17 +296,99 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         setIsAuthenticated(false);
     };
 
-    const completeOnboarding = async (initialData: AppData, pin: string, age: number | null) => {
+    const changePin = async (oldPin: string, newPin: string): Promise<boolean> => {
+        // Verify old PIN first
+        const oldPinHash = await hashPin(oldPin);
+        const storedHash = localStorage.getItem('zenith-finance-pin');
+        
+        if (oldPinHash !== storedHash) {
+            return false; // Old PIN doesn't match
+        }
+        
+        // Set new PIN
+        const newPinHash = await hashPin(newPin);
+        localStorage.setItem('zenith-finance-pin', newPinHash);
+        return true;
+    };
+
+    const resetApp = async () => {
+        // Clear all localStorage data
+        localStorage.removeItem('zenith-finance-pin');
+        localStorage.removeItem('zenith-finance-onboarded');
+    localStorage.removeItem('zenith-finance-user-id');
+    localStorage.removeItem('zenith-user-id');
+        localStorage.removeItem('zenith-finance-data');
+        
+        // Clear database data
+        try {
+            const emptyData: AppData = {
+                transactions: [],
+                debts: [],
+                goals: [],
+                investmentWishlist: [],
+                investmentHoldings: [],
+                budgets: [],
+                brokers: [],
+                geminiApiKey: '',
+                userProfile: { name: 'User', age: null },
+                auth: { recoveryHash: null },
+                chatHistory: [],
+            };
+            await dataProvider.saveData(userId, emptyData);
+        } catch (error) {
+            console.error('Error clearing database:', error);
+        }
+        
+        // Reset state
+        setIsAuthenticated(false);
+        setIsOnboarded(false);
+        setData({
+            transactions: [],
+            debts: [],
+            goals: [],
+            investmentWishlist: [],
+            investmentHoldings: [],
+            budgets: [],
+            brokers: [],
+            geminiApiKey: '',
+            userProfile: { name: 'User', age: null },
+            auth: { recoveryHash: null },
+            chatHistory: [],
+        });
+        
+        // Reload the page to restart the app
+        window.location.reload();
+    };
+
+    const completeOnboarding = async (initialData: AppData, pin: string, age: number | null, name: string, recoveryKey: string) => {
         const pinHash = await hashPin(pin);
         localStorage.setItem('zenith-finance-pin', pinHash);
+        const recoveryHash = await hashPin(recoveryKey);
+        localStorage.setItem('zenith-recovery-hash', recoveryHash);
         const dataToSave = { 
-            ...initialData, // Use the passed initialData
-            userProfile: { age },
+            ...initialData,
+            userProfile: { name, age },
+            auth: { recoveryHash },
         };
-        localStorage.setItem('zenith-finance-data', JSON.stringify(dataToSave));
+        
+        // Save to data provider
+        await dataProvider.saveData(userId, dataToSave);
+        
         setData(dataToSave);
         setIsOnboarded(true);
         setIsAuthenticated(true);
+    };
+
+    const resetPinWithRecoveryKey = async (recoveryKey: string, newPin: string): Promise<boolean> => {
+        const providedHash = await hashPin(recoveryKey);
+        const localRecovery = localStorage.getItem('zenith-recovery-hash');
+        const savedRecovery = data.auth?.recoveryHash || null;
+        const matches = (localRecovery && localRecovery === providedHash) || (savedRecovery && savedRecovery === providedHash);
+        if (!matches) return false;
+        const newPinHash = await hashPin(newPin);
+        localStorage.setItem('zenith-finance-pin', newPinHash);
+        setIsAuthenticated(true);
+        return true;
     };
 
     const contextValue: AppContextType = {
@@ -206,7 +398,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         loading,
         login,
         logout,
+        changePin,
+        resetApp,
         completeOnboarding,
+        resetPinWithRecoveryKey,
         addTransaction,
         updateTransaction,
         deleteTransaction,
@@ -218,6 +413,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteGoal,
         addInvestmentWish,
         addInvestmentHolding,
+        addMultipleInvestmentHoldings,
         addBudget,
         updateBudget,
         deleteBudget,

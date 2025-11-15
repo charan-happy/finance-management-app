@@ -11,7 +11,7 @@ const Card: React.FC<{ title: string; children: React.ReactNode; className?: str
 );
 
 const Dashboard: React.FC = () => {
-    const { transactions, debts, goals } = useAppContext();
+    const { transactions, debts, goals, investmentHoldings } = useAppContext();
 
     // Process data for charts
     const monthlySummary = transactions.reduce((acc, t) => {
@@ -45,7 +45,12 @@ const Dashboard: React.FC = () => {
 
     const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
     const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-    const netWorth = totalIncome - totalExpense;
+    
+    // Calculate total investment value (current market value)
+    const totalInvestments = investmentHoldings.reduce((sum, h) => sum + (h.quantity * h.currentPrice), 0);
+    
+    // Net worth = (Income - Expenses) + Current Investment Value
+    const netWorth = totalIncome - totalExpense + totalInvestments;
 
     const totalDebt = debts.reduce((sum, d) => sum + (d.totalAmount - d.amountPaid), 0);
     const totalGoalsSaved = goals.reduce((sum, g) => sum + g.savedAmount, 0);
@@ -81,22 +86,17 @@ const Dashboard: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <Card title="Net Worth">
                     <p className="text-3xl font-bold text-green-500">₹{netWorth.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-gray-500 mt-1">Cash + Investments</p>
+                </Card>
+                <Card title="Investments">
+                    <p className="text-3xl font-bold text-blue-500">₹{totalInvestments.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-gray-500 mt-1">{investmentHoldings.length} holdings</p>
                 </Card>
                 <Card title="Total Debt">
                     <p className="text-3xl font-bold text-red-500">₹{totalDebt.toLocaleString('en-IN')}</p>
                 </Card>
                 <Card title="Goals Progress">
                     <p className="text-3xl font-bold text-indigo-500">₹{totalGoalsSaved.toLocaleString('en-IN')}</p>
-                </Card>
-                 <Card title="Quick Add">
-                    <div className="flex flex-col space-y-2">
-                        <Link to="/transactions?action=add" className="text-center py-2 px-4 bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
-                           + Add Transaction
-                        </Link>
-                         <Link to="/goals?action=add" className="text-center py-2 px-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
-                           + Add Goal
-                        </Link>
-                    </div>
                 </Card>
             </div>
 

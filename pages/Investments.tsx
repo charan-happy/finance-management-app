@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { InvestmentType, InvestmentWish, InvestmentHolding } from '../types';
 import { UpstoxIcon, AngelOneIcon, FyersIcon } from '../components/Icons';
+import { createBrokerService } from '../services/brokerService';
+import { config } from '../services/config';
 
 const WishlistModal: React.FC<{ onClose: () => void; onSave: (wish: Omit<InvestmentWish, 'id'>) => void }> = ({ onClose, onSave }) => {
     const [name, setName] = useState('');
@@ -39,8 +41,52 @@ const WishlistModal: React.FC<{ onClose: () => void; onSave: (wish: Omit<Investm
 
 
 const Investments: React.FC = () => {
-    const { investmentWishlist, investmentHoldings, addInvestmentWish } = useAppContext();
+    const { investmentWishlist, investmentHoldings, addInvestmentWish, addMultipleInvestmentHoldings, brokers } = useAppContext();
     const [showWishlistModal, setShowWishlistModal] = useState(false);
+    const [syncing, setSyncing] = useState(false);
+    const [syncMessage, setSyncMessage] = useState('');
+    
+    const handleSyncAllBrokers = async () => {
+        const connectedBrokers = brokers.filter(b => b.isConnected);
+        
+        if (connectedBrokers.length === 0) {
+            setSyncMessage('Please connect at least one broker in Settings.');
+            setTimeout(() => setSyncMessage(''), 3000);
+            return;
+        }
+        
+        setSyncing(true);
+        setSyncMessage(`Syncing with ${connectedBrokers.length} broker(s)...`);
+        
+        try {
+            let totalHoldings = 0;
+            
+            for (const broker of connectedBrokers) {
+                try {
+                    const accessToken = localStorage.getItem(`${broker.id}-access-token`);
+                    if (!accessToken) continue;
+                    
+                    const brokerService = createBrokerService(broker.id, config.useMockBroker);
+                    const holdings = await brokerService.fetchHoldings(accessToken);
+                    
+                    // Add fetched holdings with broker ID to prevent duplicates
+                    addMultipleInvestmentHoldings(holdings, broker.id);
+                    
+                    totalHoldings += holdings.length;
+                } catch (error) {
+                    console.error(`Failed to sync ${broker.name}:`, error);
+                }
+            }
+            
+            setSyncMessage(`Successfully synced ${totalHoldings} holdings!`);
+            setTimeout(() => setSyncMessage(''), 5000);
+        } catch (error: any) {
+            setSyncMessage('Sync failed. Please try again.');
+            setTimeout(() => setSyncMessage(''), 3000);
+        } finally {
+            setSyncing(false);
+        }
+    };
     
     const typeColor = (type: InvestmentType) => {
         switch(type) {
@@ -94,7 +140,21 @@ const Investments: React.FC = () => {
             </div>
 
             <div>
-                <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">My Portfolio</h1>
+                <div className="flex justify-between items-center mb-4">
+                    <h1 className="text-3xl font-bold text-gray-800 dark:text-white">My Portfolio</h1>
+                    <div className="flex gap-2 items-center">
+                        {syncMessage && (
+                            <span className="text-sm text-gray-600 dark:text-gray-400">{syncMessage}</span>
+                        )}
+                        <button 
+                            onClick={handleSyncAllBrokers}
+                            disabled={syncing}
+                            className="px-4 py-2 bg-green-500 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all disabled:opacity-50"
+                        >
+                            {syncing ? 'Syncing...' : '🔄 Sync Brokers'}
+                        </button>
+                    </div>
+                </div>
                 
                 <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
                     <div className="overflow-x-auto">

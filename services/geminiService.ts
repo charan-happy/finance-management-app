@@ -57,7 +57,7 @@ export const getFinancialAdvice = async (
             },
         });
         
-        return response.text;
+        return response.text || "Sorry, I couldn't generate a response. Please try again.";
     } catch (error) {
         console.error("Gemini API call failed:", error);
         if (error instanceof Error && error.message.includes('API key not valid')) {
