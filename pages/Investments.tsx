@@ -30,7 +30,7 @@ const WishlistModal: React.FC<{ onClose: () => void; onSave: (wish: Omit<Investm
                     <input type="number" placeholder="Target Price (₹)" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" required />
                     <input type="text" placeholder="Broker" value={broker} onChange={e => setBroker(e.target.value)} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
                     <div className="flex justify-end space-x-2">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg">Cancel</button>
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-lg">Cancel</button>
                         <button type="submit" className="px-4 py-2 bg-indigo-500 text-white rounded-lg">Save</button>
                     </div>
                 </form>
@@ -173,7 +173,9 @@ const Investments: React.FC = () => {
                                     <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Asset</th>
                                     <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Type</th>
                                     <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider text-right">Quantity</th>
-                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider text-right">Value</th>
+                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider text-right">Invested</th>
+                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider text-right">Current Value</th>
+                                    <th className="px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider text-right">Returns</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -189,7 +191,21 @@ const Investments: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4"> <span className={`text-xs font-semibold px-2 py-1 rounded-full ${typeColor(h.type)}`}>{h.type}</span></td>
                                         <td className="px-6 py-4 text-right">{h.quantity}</td>
-                                        <td className="px-6 py-4 text-right font-semibold text-green-500">₹{(h.quantity * h.currentPrice).toLocaleString('en-IN')}</td>
+                                        <td className="px-6 py-4 text-right">{h.quantity === 1 && h.avgPrice > 0 && h.currentPrice > 0 && h.avgPrice > 1000 ? `₹${h.avgPrice.toLocaleString('en-IN')}` : `₹${(h.quantity * h.avgPrice).toLocaleString('en-IN')}`}</td>
+                                        <td className="px-6 py-4 text-right font-semibold text-green-500">₹{(h.quantity === 1 ? h.currentPrice : (h.quantity * h.currentPrice)).toLocaleString('en-IN')}</td>
+                                        <td className="px-6 py-4 text-right font-semibold" style={{ color: (() => {
+                                            const invested = h.quantity === 1 ? h.avgPrice : (h.quantity * h.avgPrice);
+                                            const current = h.quantity === 1 ? h.currentPrice : (h.quantity * h.currentPrice);
+                                            const ret = invested > 0 ? ((current - invested) / invested) * 100 : 0;
+                                            return ret >= 0 ? '#16A34A' : '#DC2626';
+                                        })() }}>
+                                            {(() => {
+                                                const invested = h.quantity === 1 ? h.avgPrice : (h.quantity * h.avgPrice);
+                                                const current = h.quantity === 1 ? h.currentPrice : (h.quantity * h.currentPrice);
+                                                const ret = invested > 0 ? ((current - invested) / invested) * 100 : 0;
+                                                return `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%`;
+                                            })()
+                                        }</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -211,12 +227,34 @@ const Investments: React.FC = () => {
                                 const quantity = parseFloat(formData.get('quantity') as string) || 0;
                                 const avgPrice = parseFloat(formData.get('avgPrice') as string) || 0;
                                 const currentPrice = parseFloat(formData.get('currentPrice') as string) || 0;
+                                const useTotals = formData.get('useTotals') === 'on';
+                                const investedAmount = parseFloat(formData.get('investedAmount') as string) || 0;
+                                const currentValue = parseFloat(formData.get('currentValue') as string) || 0;
                                 const brokerId = formData.get('brokerId') as any || 'upstox';
-
-                                if (manualState?.id) {
-                                    updateInvestmentHolding({ id: manualState.id, name, type, quantity, avgPrice, currentPrice, brokerId });
+                                if (useTotals && investedAmount > 0) {
+                                    // Store as a single-quantity holding where avgPrice/currentPrice represent totals
+                                    const h: Omit<InvestmentHolding, 'id'> = {
+                                        name,
+                                        type,
+                                        quantity: 1,
+                                        avgPrice: investedAmount,
+                                        currentPrice: currentValue || investedAmount,
+                                        brokerId,
+                                    };
+                                    if (manualState?.id) updateInvestmentHolding({ id: manualState.id, ...h });
+                                    else addInvestmentHolding(h);
                                 } else {
-                                    addInvestmentHolding({ name, type, quantity, avgPrice, currentPrice, brokerId });
+                                    // Use per-unit data
+                                    const h: Omit<InvestmentHolding, 'id'> = {
+                                        name,
+                                        type,
+                                        quantity: quantity || 0,
+                                        avgPrice: avgPrice || 0,
+                                        currentPrice: currentPrice || avgPrice || 0,
+                                        brokerId,
+                                    };
+                                    if (manualState?.id) updateInvestmentHolding({ id: manualState.id, ...h });
+                                    else addInvestmentHolding(h);
                                 }
                                 setShowManualModal(false);
                             }} className="space-y-4">
@@ -224,14 +262,31 @@ const Investments: React.FC = () => {
                                 <select name="type" defaultValue={manualState?.type || InvestmentType.STOCK} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     {(Object.values(InvestmentType) as InvestmentType[]).map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
-                                <input name="quantity" type="number" defaultValue={manualState?.quantity ?? 0} placeholder="Quantity" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
-                                <input name="avgPrice" type="number" defaultValue={manualState?.avgPrice ?? 0} placeholder="Average Price" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
-                                <input name="currentPrice" type="number" defaultValue={manualState?.currentPrice ?? 0} placeholder="Current Price" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                <div className="flex items-center gap-2">
+                                    <label className="inline-flex items-center gap-2">
+                                        <input name="useTotals" type="checkbox" defaultChecked={false} />
+                                        <span className="text-sm">I only know totals (invested & current)</span>
+                                    </label>
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="flex gap-2">
+                                        <input name="quantity" type="number" defaultValue={manualState?.quantity ?? 0} placeholder="Quantity" className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                        <input name="avgPrice" type="number" defaultValue={manualState?.avgPrice ?? 0} placeholder="Average Price (per unit)" className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <input name="currentPrice" type="number" defaultValue={manualState?.currentPrice ?? 0} placeholder="Current Price (per unit)" className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                    </div>
+                                    <div className="text-sm text-gray-500">OR</div>
+                                    <div className="flex gap-2">
+                                        <input name="investedAmount" type="number" defaultValue={manualState && manualState.quantity === 1 ? manualState.avgPrice ?? '' : ''} placeholder="Total Invested (₹)" className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                        <input name="currentValue" type="number" defaultValue={manualState && manualState.quantity === 1 ? manualState.currentPrice ?? '' : ''} placeholder="Total Current Value (₹)" className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                    </div>
+                                </div>
                                 <select name="brokerId" defaultValue={manualState?.brokerId || 'upstox'} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
                                     {brokers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                                 </select>
                                 <div className="flex justify-end gap-2">
-                                    <button type="button" onClick={() => setShowManualModal(false)} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+                                    <button type="button" onClick={() => setShowManualModal(false)} className="px-4 py-2 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-lg">Cancel</button>
                                     <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Save</button>
                                 </div>
                             </form>
@@ -361,7 +416,7 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </div>
 
             <div className="flex justify-end gap-2">
-                <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+                <button onClick={onClose} className="px-4 py-2 bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-gray-200 border border-gray-200 dark:border-gray-600 rounded-lg">Cancel</button>
                 <button onClick={handleGenerate} className="px-4 py-2 bg-teal-600 text-white rounded-lg">Generate Budgets</button>
             </div>
         </div>

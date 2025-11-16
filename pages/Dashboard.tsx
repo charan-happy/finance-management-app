@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid } from 'recharts';
 import { Link } from 'react-router-dom';
@@ -164,8 +164,54 @@ const Dashboard: React.FC = () => {
                         </PieChart>
                     </ResponsiveContainer>
                 </Card>
+                <Card title="Salary Templates">
+                    <SalaryTemplates />
+                </Card>
             </div>
             
+        </div>
+    );
+};
+
+const SalaryTemplates: React.FC = () => {
+    const [templates, setTemplates] = useState<{ name: string; allocations: { label: string; percent: string }[] }[]>([]);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('salaryTemplates');
+            if (raw) setTemplates(JSON.parse(raw));
+        } catch (e) {
+            console.warn('Failed to load salary templates', e);
+        }
+    }, []);
+
+    const remove = (name: string) => {
+        const next = templates.filter(t => t.name !== name);
+        setTemplates(next);
+        localStorage.setItem('salaryTemplates', JSON.stringify(next));
+    };
+
+    if (templates.length === 0) return <p className="text-sm text-gray-600 dark:text-gray-400">No saved salary templates.</p>;
+
+    return (
+        <div className="space-y-3">
+            {templates.map(t => (
+                <div key={t.name} className="p-3 bg-white dark:bg-gray-800 rounded-lg">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <div className="font-semibold">{t.name}</div>
+                            <div className="text-xs text-gray-500">{t.allocations.length} categories</div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button onClick={() => navigator.clipboard?.writeText(JSON.stringify(t.allocations))} className="px-3 py-1 bg-indigo-500 text-white rounded">Copy</button>
+                            <button onClick={() => remove(t.name)} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
+                        </div>
+                    </div>
+                    <div className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                        {t.allocations.slice(0,5).map((a,i) => <div key={i} className="flex justify-between"><span>{a.label}</span><span className="font-semibold">{a.percent}%</span></div>)}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 };
