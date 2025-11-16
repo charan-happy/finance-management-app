@@ -25,6 +25,8 @@ interface AppContextType extends AppData {
     addInvestmentWish: (wish: Omit<InvestmentWish, 'id'>) => void;
     addInvestmentHolding: (holding: Omit<InvestmentHolding, 'id'>) => void;
     addMultipleInvestmentHoldings: (holdings: Omit<InvestmentHolding, 'id'>[], brokerId?: string) => void;
+    updateInvestmentHolding: (holding: InvestmentHolding) => void;
+    deleteInvestmentHolding: (holdingId: string) => void;
     addBudget: (budget: Omit<Budget, 'id'>) => void;
     updateBudget: (budget: Budget) => void;
     deleteBudget: (budgetId: string) => void;
@@ -244,6 +246,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         updateData({ investmentHoldings: [...data.investmentHoldings, newHolding] });
     };
 
+    const updateInvestmentHolding = (updatedHolding: InvestmentHolding) => {
+        const newHoldings = data.investmentHoldings.map(h => h.id === updatedHolding.id ? updatedHolding : h);
+        updateData({ investmentHoldings: newHoldings });
+    };
+
+    const deleteInvestmentHolding = (holdingId: string) => {
+        const newHoldings = data.investmentHoldings.filter(h => h.id !== holdingId);
+        updateData({ investmentHoldings: newHoldings });
+    };
+
     const addMultipleInvestmentHoldings = (holdings: Omit<InvestmentHolding, 'id'>[], brokerId?: string) => {
         // Remove existing holdings from this broker to avoid duplicates
         const filteredHoldings = brokerId 
@@ -413,6 +425,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         deleteGoal,
         addInvestmentWish,
         addInvestmentHolding,
+    updateInvestmentHolding,
+    deleteInvestmentHolding,
         addMultipleInvestmentHoldings,
         addBudget,
         updateBudget,

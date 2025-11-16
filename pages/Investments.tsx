@@ -41,10 +41,13 @@ const WishlistModal: React.FC<{ onClose: () => void; onSave: (wish: Omit<Investm
 
 
 const Investments: React.FC = () => {
-    const { investmentWishlist, investmentHoldings, addInvestmentWish, addMultipleInvestmentHoldings, brokers } = useAppContext();
+    const { investmentWishlist, investmentHoldings, addInvestmentWish, addMultipleInvestmentHoldings, brokers, addInvestmentHolding, updateInvestmentHolding, deleteInvestmentHolding } = useAppContext();
     const [showWishlistModal, setShowWishlistModal] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [syncMessage, setSyncMessage] = useState('');
+    const [showManualModal, setShowManualModal] = useState(false);
+    const [manualState, setManualState] = useState<Partial<InvestmentHolding> | null>(null);
+    const [showSalaryPlanner, setShowSalaryPlanner] = useState(false);
     
     const handleSyncAllBrokers = async () => {
         const connectedBrokers = brokers.filter(b => b.isConnected);
@@ -153,6 +156,12 @@ const Investments: React.FC = () => {
                         >
                             {syncing ? 'Syncing...' : '🔄 Sync Brokers'}
                         </button>
+                        <button onClick={() => { setManualState(null); setShowManualModal(true); }} className="px-4 py-2 bg-indigo-500 text-white font-semibold rounded-lg">
+                            + Add Holding
+                        </button>
+                        <button onClick={() => setShowSalaryPlanner(true)} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg">
+                            Salary Planner
+                        </button>
                     </div>
                 </div>
                 
@@ -173,6 +182,10 @@ const Investments: React.FC = () => {
                                         <td className="px-6 py-4 font-medium flex items-center gap-2">
                                             <BrokerIcon brokerId={h.brokerId} />
                                             {h.name}
+                                            <div className="ml-3 flex gap-2">
+                                                <button onClick={() => { setManualState(h); setShowManualModal(true); }} className="text-sm text-indigo-600 underline">Edit</button>
+                                                <button onClick={() => { if(confirm('Delete this holding?')) deleteInvestmentHolding(h.id); }} className="text-sm text-red-600 underline">Delete</button>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4"> <span className={`text-xs font-semibold px-2 py-1 rounded-full ${typeColor(h.type)}`}>{h.type}</span></td>
                                         <td className="px-6 py-4 text-right">{h.quantity}</td>
@@ -184,6 +197,103 @@ const Investments: React.FC = () => {
                          {investmentHoldings.length === 0 && <p className="p-6 text-center text-gray-500 dark:text-gray-400">Your portfolio is empty. Sync with your broker to see sample data.</p>}
                     </div>
                 </div>
+                {/* Manual Add/Edit Modal */}
+                {showManualModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold mb-4">{manualState?.id ? 'Edit Holding' : 'Add Holding'}</h3>
+                            <form onSubmit={(e) => {
+                                e.preventDefault();
+                                const form = e.currentTarget as HTMLFormElement;
+                                const formData = new FormData(form);
+                                const name = formData.get('name') as string;
+                                const type = formData.get('type') as InvestmentType;
+                                const quantity = parseFloat(formData.get('quantity') as string) || 0;
+                                const avgPrice = parseFloat(formData.get('avgPrice') as string) || 0;
+                                const currentPrice = parseFloat(formData.get('currentPrice') as string) || 0;
+                                const brokerId = formData.get('brokerId') as any || 'upstox';
+
+                                if (manualState?.id) {
+                                    updateInvestmentHolding({ id: manualState.id, name, type, quantity, avgPrice, currentPrice, brokerId });
+                                } else {
+                                    addInvestmentHolding({ name, type, quantity, avgPrice, currentPrice, brokerId });
+                                }
+                                setShowManualModal(false);
+                            }} className="space-y-4">
+                                <input name="name" defaultValue={manualState?.name || ''} placeholder="Name" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" required />
+                                <select name="type" defaultValue={manualState?.type || InvestmentType.STOCK} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    {(Object.values(InvestmentType) as InvestmentType[]).map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                                <input name="quantity" type="number" defaultValue={manualState?.quantity ?? 0} placeholder="Quantity" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                <input name="avgPrice" type="number" defaultValue={manualState?.avgPrice ?? 0} placeholder="Average Price" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                <input name="currentPrice" type="number" defaultValue={manualState?.currentPrice ?? 0} placeholder="Current Price" className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                                <select name="brokerId" defaultValue={manualState?.brokerId || 'upstox'} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                                    {brokers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                </select>
+                                <div className="flex justify-end gap-2">
+                                    <button type="button" onClick={() => setShowManualModal(false)} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+                                    <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Save</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Salary Planner Modal */}
+                {showSalaryPlanner && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold mb-4">Salary Planner</h3>
+                            <SalaryPlanner onClose={() => setShowSalaryPlanner(false)} />
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+    const { addBudget, addTransaction } = useAppContext();
+    const [salary, setSalary] = useState('');
+    const [allocations, setAllocations] = useState<{ label: string; percent: string }[]>([
+        { label: 'Rent', percent: '30' },
+        { label: 'Groceries', percent: '15' },
+        { label: 'Savings', percent: '20' },
+        { label: 'Investments', percent: '20' },
+        { label: 'Misc', percent: '15' },
+    ]);
+
+    const handleGenerate = () => {
+        const s = parseFloat(salary || '0');
+        if (!s || s <= 0) return;
+        allocations.forEach(a => {
+            const percent = parseFloat(a.percent || '0');
+            const amount = Math.round((s * percent) / 100);
+            addBudget({ category: a.label, amount });
+            // also add a recurring transaction template (income->expense)
+            addTransaction({ type: 'expense' as any, category: a.label, amount, date: new Date().toISOString(), description: 'Planned from salary', isRecurring: true });
+        });
+        onClose();
+    };
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium">Monthly Salary (₹)</label>
+                <input type="number" value={salary} onChange={e => setSalary(e.target.value)} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+            </div>
+            <div className="space-y-2">
+                {allocations.map((a, i) => (
+                    <div key={i} className="flex gap-2">
+                        <input className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.label} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, label: e.target.value} : x))} />
+                        <input className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.percent} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, percent: e.target.value} : x))} />
+                    </div>
+                ))}
+            </div>
+            <div className="flex justify-end gap-2">
+                <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
+                <button onClick={handleGenerate} className="px-4 py-2 bg-yellow-500 text-white rounded-lg">Generate Budgets</button>
             </div>
         </div>
     );
