@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { InvestmentType, InvestmentWish, InvestmentHolding } from '../types';
 import { UpstoxIcon, AngelOneIcon, FyersIcon } from '../components/Icons';
@@ -263,16 +263,48 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         { label: 'Investments', percent: '20' },
         { label: 'Misc', percent: '15' },
     ]);
+    const [templates, setTemplates] = useState<{ name: string; allocations: { label: string; percent: string }[] }[]>([]);
+    const [templateName, setTemplateName] = useState('');
+    const [createRecurring, setCreateRecurring] = useState(true);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('salaryTemplates');
+            if (raw) setTemplates(JSON.parse(raw));
+        } catch (e) {
+            console.warn('Failed to load salary templates', e);
+        }
+    }, []);
+
+    const saveTemplate = () => {
+        if (!templateName.trim()) return alert('Please provide a template name');
+        const next = [...templates, { name: templateName.trim(), allocations }];
+        setTemplates(next);
+        localStorage.setItem('salaryTemplates', JSON.stringify(next));
+        setTemplateName('');
+        alert('Template saved');
+    };
+
+    const loadTemplate = (name: string) => {
+        const t = templates.find(x => x.name === name);
+        if (t) setAllocations(t.allocations);
+    };
+
+    const addRow = () => setAllocations([...allocations, { label: 'New', percent: '0' }]);
+    const removeRow = (i: number) => setAllocations(allocations.filter((_, idx) => idx !== i));
+
+    const sumPercent = allocations.reduce((s, a) => s + (parseFloat(a.percent || '0') || 0), 0);
 
     const handleGenerate = () => {
         const s = parseFloat(salary || '0');
-        if (!s || s <= 0) return;
+        if (!s || s <= 0) return alert('Please enter a valid salary');
+        if (sumPercent <= 0) return alert('Please allocate percentages to categories');
+
         allocations.forEach(a => {
             const percent = parseFloat(a.percent || '0');
             const amount = Math.round((s * percent) / 100);
             addBudget({ category: a.label, amount });
-            // also add a recurring transaction template (income->expense)
-            addTransaction({ type: 'expense' as any, category: a.label, amount, date: new Date().toISOString(), description: 'Planned from salary', isRecurring: true });
+            addTransaction({ type: 'expense' as any, category: a.label, amount, date: new Date().toISOString(), description: 'Planned from salary', isRecurring: createRecurring });
         });
         onClose();
     };
@@ -283,17 +315,54 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <label className="block text-sm font-medium">Monthly Salary (₹)</label>
                 <input type="number" value={salary} onChange={e => setSalary(e.target.value)} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
             </div>
+
+            <div className="flex items-center gap-2">
+                <button onClick={addRow} className="px-3 py-2 bg-indigo-500 text-white rounded-lg">+ Add Field</button>
+                <input placeholder="Template name" value={templateName} onChange={e => setTemplateName(e.target.value)} className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                <button onClick={saveTemplate} className="px-3 py-2 bg-indigo-600 text-white rounded-lg">Save Template</button>
+                {templates.length > 0 && (
+                    <select onChange={e => loadTemplate(e.target.value)} className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                        <option value="">Load Template</option>
+                        {templates.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                    </select>
+                )}
+            </div>
+
             <div className="space-y-2">
                 {allocations.map((a, i) => (
-                    <div key={i} className="flex gap-2">
+                    <div key={i} className="flex gap-2 items-center">
                         <input className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.label} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, label: e.target.value} : x))} />
                         <input className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.percent} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, percent: e.target.value} : x))} />
+                        <button onClick={() => removeRow(i)} className="px-2 py-1 bg-red-500 text-white rounded">Remove</button>
                     </div>
                 ))}
             </div>
+
+            <div>
+                <p className="text-sm">Total allocation: <span className={`font-semibold ${sumPercent === 100 ? 'text-green-600' : 'text-red-600'}`}>{sumPercent}%</span></p>
+                {sumPercent !== 100 && <p className="text-xs text-gray-500">It's okay if total is not 100 — planner will allocate according to provided percentages. For best results target 100%.</p>}
+            </div>
+
+            <div className="flex items-center gap-3">
+                <label className="inline-flex items-center gap-2">
+                    <input type="checkbox" checked={createRecurring} onChange={e => setCreateRecurring(e.target.checked)} />
+                    <span className="text-sm">Create recurring transactions</span>
+                </label>
+            </div>
+
+            <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                <h4 className="font-semibold mb-2">Preview</h4>
+                {salary && allocations.map((a, i) => (
+                    <div key={i} className="flex justify-between text-sm">
+                        <div>{a.label}</div>
+                        <div>₹{Math.round(((parseFloat(salary || '0')) * (parseFloat(a.percent || '0') || 0) / 100)).toLocaleString('en-IN')}</div>
+                    </div>
+                ))}
+            </div>
+
             <div className="flex justify-end gap-2">
                 <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-lg">Cancel</button>
-                <button onClick={handleGenerate} className="px-4 py-2 bg-yellow-500 text-white rounded-lg">Generate Budgets</button>
+                <button onClick={handleGenerate} className="px-4 py-2 bg-teal-600 text-white rounded-lg">Generate Budgets</button>
             </div>
         </div>
     );
