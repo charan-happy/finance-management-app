@@ -54,6 +54,9 @@ export interface InvestmentHolding {
     avgPrice: number;
     currentPrice: number;
     brokerId: 'upstox' | 'angelone' | 'fyers';
+    // Optional totals when user only knows aggregated invested/current values
+    investedTotal?: number;
+    currentTotal?: number;
 }
 
 export interface Budget {

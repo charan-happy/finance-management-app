@@ -203,7 +203,15 @@ const SalaryTemplates: React.FC = () => {
                             <div className="text-xs text-gray-500">{t.allocations.length} categories</div>
                         </div>
                         <div className="flex gap-2">
-                            <button onClick={() => navigator.clipboard?.writeText(JSON.stringify(t.allocations))} className="px-3 py-1 bg-indigo-500 text-white rounded">Copy</button>
+                            <button onClick={() => {
+                                try {
+                                    const payload = { name: t.name, allocations: t.allocations, month: (t as any).month };
+                                    localStorage.setItem('salaryPlanner.editTemplate', JSON.stringify(payload));
+                                    // signal any open planner (or next open) to load this template
+                                    window.dispatchEvent(new CustomEvent('salaryPlanner:open'));
+                                    alert('Open the Salary Planner (Investments → Salary Planner) and it will load this template for editing.');
+                                } catch (e) { console.warn(e); }
+                            }} className="px-3 py-1 bg-indigo-500 text-white rounded">Edit</button>
                             <button onClick={() => remove(t.name)} className="px-3 py-1 bg-red-500 text-white rounded">Delete</button>
                         </div>
                     </div>

@@ -48,6 +48,7 @@ const Investments: React.FC = () => {
     const [showManualModal, setShowManualModal] = useState(false);
     const [manualState, setManualState] = useState<Partial<InvestmentHolding> | null>(null);
     const [showSalaryPlanner, setShowSalaryPlanner] = useState(false);
+    const [plannerInitialTemplate, setPlannerInitialTemplate] = useState<any | undefined>(undefined);
     
     const handleSyncAllBrokers = async () => {
         const connectedBrokers = brokers.filter(b => b.isConnected);
@@ -113,6 +114,21 @@ const Investments: React.FC = () => {
         setShowWishlistModal(false);
     };
 
+    useEffect(() => {
+        const handler = () => {
+            try {
+                const raw = localStorage.getItem('salaryPlanner.editTemplate');
+                if (raw) {
+                    setPlannerInitialTemplate(JSON.parse(raw));
+                    localStorage.removeItem('salaryPlanner.editTemplate');
+                }
+            } catch (e) { setPlannerInitialTemplate(undefined); }
+            setShowSalaryPlanner(true);
+        };
+        window.addEventListener('salaryPlanner:open', handler as any);
+        return () => window.removeEventListener('salaryPlanner:open', handler as any);
+    }, []);
+
     return (
         <div className="space-y-8">
             {showWishlistModal && <WishlistModal onClose={() => setShowWishlistModal(false)} onSave={handleSaveWish} />}
@@ -159,7 +175,17 @@ const Investments: React.FC = () => {
                         <button onClick={() => { setManualState(null); setShowManualModal(true); }} className="px-4 py-2 bg-indigo-500 text-white font-semibold rounded-lg">
                             + Add Holding
                         </button>
-                        <button onClick={() => setShowSalaryPlanner(true)} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg">
+                        <button onClick={() => {
+                                try {
+                                    const raw = localStorage.getItem('salaryPlanner.editTemplate');
+                                    if (raw) {
+                                        setPlannerInitialTemplate(JSON.parse(raw));
+                                        // remove after consuming so next open is clean
+                                        localStorage.removeItem('salaryPlanner.editTemplate');
+                                    } else setPlannerInitialTemplate(undefined);
+                                } catch (e) { setPlannerInitialTemplate(undefined); }
+                                setShowSalaryPlanner(true);
+                            }} className="px-4 py-2 bg-yellow-500 text-white font-semibold rounded-lg">
                             Salary Planner
                         </button>
                     </div>
@@ -191,21 +217,19 @@ const Investments: React.FC = () => {
                                         </td>
                                         <td className="px-6 py-4"> <span className={`text-xs font-semibold px-2 py-1 rounded-full ${typeColor(h.type)}`}>{h.type}</span></td>
                                         <td className="px-6 py-4 text-right">{h.quantity}</td>
-                                        <td className="px-6 py-4 text-right">{h.quantity === 1 && h.avgPrice > 0 && h.currentPrice > 0 && h.avgPrice > 1000 ? `₹${h.avgPrice.toLocaleString('en-IN')}` : `₹${(h.quantity * h.avgPrice).toLocaleString('en-IN')}`}</td>
-                                        <td className="px-6 py-4 text-right font-semibold text-green-500">₹{(h.quantity === 1 ? h.currentPrice : (h.quantity * h.currentPrice)).toLocaleString('en-IN')}</td>
-                                        <td className="px-6 py-4 text-right font-semibold" style={{ color: (() => {
-                                            const invested = h.quantity === 1 ? h.avgPrice : (h.quantity * h.avgPrice);
-                                            const current = h.quantity === 1 ? h.currentPrice : (h.quantity * h.currentPrice);
+                                        {(() => {
+                                            const invested = (typeof h.investedTotal === 'number' && h.investedTotal > 0) ? h.investedTotal : (h.quantity * h.avgPrice);
+                                            const current = (typeof h.currentTotal === 'number' && h.currentTotal > 0) ? h.currentTotal : (h.quantity * h.currentPrice);
                                             const ret = invested > 0 ? ((current - invested) / invested) * 100 : 0;
-                                            return ret >= 0 ? '#16A34A' : '#DC2626';
-                                        })() }}>
-                                            {(() => {
-                                                const invested = h.quantity === 1 ? h.avgPrice : (h.quantity * h.avgPrice);
-                                                const current = h.quantity === 1 ? h.currentPrice : (h.quantity * h.currentPrice);
-                                                const ret = invested > 0 ? ((current - invested) / invested) * 100 : 0;
-                                                return `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%`;
-                                            })()
-                                        }</td>
+                                            const color = ret >= 0 ? '#16A34A' : '#DC2626';
+                                            return (
+                                                <>
+                                                    <td className="px-6 py-4 text-right">₹{(invested).toLocaleString('en-IN')}</td>
+                                                    <td className="px-6 py-4 text-right font-semibold text-green-500">₹{(current).toLocaleString('en-IN')}</td>
+                                                    <td className="px-6 py-4 text-right font-semibold" style={{ color }}>{`${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%`}</td>
+                                                </>
+                                            );
+                                        })()}
                                     </tr>
                                 ))}
                             </tbody>
@@ -232,14 +256,16 @@ const Investments: React.FC = () => {
                                 const currentValue = parseFloat(formData.get('currentValue') as string) || 0;
                                 const brokerId = formData.get('brokerId') as any || 'upstox';
                                 if (useTotals && investedAmount > 0) {
-                                    // Store as a single-quantity holding where avgPrice/currentPrice represent totals
+                                    // Store totals in separate fields
                                     const h: Omit<InvestmentHolding, 'id'> = {
                                         name,
                                         type,
                                         quantity: 1,
-                                        avgPrice: investedAmount,
-                                        currentPrice: currentValue || investedAmount,
+                                        avgPrice: 0,
+                                        currentPrice: 0,
                                         brokerId,
+                                        investedTotal: investedAmount,
+                                        currentTotal: currentValue || investedAmount,
                                     };
                                     if (manualState?.id) updateInvestmentHolding({ id: manualState.id, ...h });
                                     else addInvestmentHolding(h);
@@ -299,7 +325,7 @@ const Investments: React.FC = () => {
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
                             <h3 className="text-lg font-bold mb-4">Salary Planner</h3>
-                            <SalaryPlanner onClose={() => setShowSalaryPlanner(false)} />
+                            <SalaryPlanner onClose={() => setShowSalaryPlanner(false)} initialTemplate={plannerInitialTemplate} />
                         </div>
                     </div>
                 )}
@@ -308,19 +334,21 @@ const Investments: React.FC = () => {
     );
 };
 
-const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+const SalaryPlanner: React.FC<{ onClose: () => void, initialTemplate?: { name?: string; allocations?: { label: string; value: string; mode?: 'percent'|'amount' }[], month?: string } }> = ({ onClose, initialTemplate }) => {
     const { addBudget, addTransaction } = useAppContext();
     const [salary, setSalary] = useState('');
-    const [allocations, setAllocations] = useState<{ label: string; percent: string }[]>([
-        { label: 'Rent', percent: '30' },
-        { label: 'Groceries', percent: '15' },
-        { label: 'Savings', percent: '20' },
-        { label: 'Investments', percent: '20' },
-        { label: 'Misc', percent: '15' },
+    const [otherIncomes, setOtherIncomes] = useState<{ label: string; amount: string }[]>([]);
+    const [allocations, setAllocations] = useState<{ label: string; value: string; mode: 'percent'|'amount' }[]>([
+        { label: 'Rent', value: '30', mode: 'percent' },
+        { label: 'Groceries', value: '15', mode: 'percent' },
+        { label: 'Savings', value: '20', mode: 'percent' },
+        { label: 'Investments', value: '20', mode: 'percent' },
+        { label: 'Misc', value: '15', mode: 'percent' },
     ]);
-    const [templates, setTemplates] = useState<{ name: string; allocations: { label: string; percent: string }[] }[]>([]);
+    const [templates, setTemplates] = useState<{ name: string; allocations: { label: string; value: string; mode: 'percent'|'amount' }[]; month?: string }[]>([]);
     const [templateName, setTemplateName] = useState('');
     const [createRecurring, setCreateRecurring] = useState(true);
+    const [month, setMonth] = useState<string>(() => new Date().toLocaleString('default', { month: 'long', year: 'numeric' }));
 
     useEffect(() => {
         try {
@@ -329,11 +357,17 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         } catch (e) {
             console.warn('Failed to load salary templates', e);
         }
-    }, []);
+        // If opened with an initial template (from Dashboard Edit), populate
+        if (initialTemplate && initialTemplate.allocations) {
+            setAllocations(initialTemplate.allocations.map(a => ({ label: a.label, value: a.value, mode: (a as any).mode || 'percent' })));
+            if (initialTemplate.month) setMonth(initialTemplate.month);
+            if (initialTemplate.name) setTemplateName(initialTemplate.name);
+        }
+    }, [initialTemplate]);
 
     const saveTemplate = () => {
         if (!templateName.trim()) return alert('Please provide a template name');
-        const next = [...templates, { name: templateName.trim(), allocations }];
+        const next = [...templates, { name: templateName.trim(), allocations, month }];
         setTemplates(next);
         localStorage.setItem('salaryTemplates', JSON.stringify(next));
         setTemplateName('');
@@ -342,22 +376,36 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
     const loadTemplate = (name: string) => {
         const t = templates.find(x => x.name === name);
-        if (t) setAllocations(t.allocations);
+        if (t) {
+            setAllocations(t.allocations.map(a => ({ label: a.label, value: a.value, mode: a.mode || 'percent' })));
+            if (t.month) setMonth(t.month);
+        }
     };
 
-    const addRow = () => setAllocations([...allocations, { label: 'New', percent: '0' }]);
+    const addRow = () => setAllocations([...allocations, { label: 'New', value: '0', mode: 'percent' }]);
     const removeRow = (i: number) => setAllocations(allocations.filter((_, idx) => idx !== i));
 
-    const sumPercent = allocations.reduce((s, a) => s + (parseFloat(a.percent || '0') || 0), 0);
+    const sumPercent = allocations.reduce((s, a) => s + (a.mode === 'percent' ? (parseFloat(a.value || '0') || 0) : 0), 0);
+
+    const totalAvailable = () => {
+        const base = parseFloat(salary || '0');
+        const others = otherIncomes.reduce((sum, o) => sum + (parseFloat(o.amount || '0') || 0), 0);
+        return base + others;
+    };
 
     const handleGenerate = () => {
-        const s = parseFloat(salary || '0');
-        if (!s || s <= 0) return alert('Please enter a valid salary');
-        if (sumPercent <= 0) return alert('Please allocate percentages to categories');
+        const avail = totalAvailable();
+        if (!avail || avail <= 0) return alert('Please enter a valid salary or additional income');
+        // If no allocations exist, block
+        if (allocations.length === 0) return alert('Please add at least one allocation');
 
         allocations.forEach(a => {
-            const percent = parseFloat(a.percent || '0');
-            const amount = Math.round((s * percent) / 100);
+            let amount = 0;
+            if (a.mode === 'percent') {
+                amount = Math.round((avail * (parseFloat(a.value || '0') || 0)) / 100);
+            } else {
+                amount = Math.round(parseFloat(a.value || '0') || 0);
+            }
             addBudget({ category: a.label, amount });
             addTransaction({ type: 'expense' as any, category: a.label, amount, date: new Date().toISOString(), description: 'Planned from salary', isRecurring: createRecurring });
         });
@@ -369,6 +417,21 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <div>
                 <label className="block text-sm font-medium">Monthly Salary (₹)</label>
                 <input type="number" value={salary} onChange={e => setSalary(e.target.value)} className="w-full px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+            </div>
+
+            <div>
+                <label className="block text-sm font-medium">Other Incomes (optional)</label>
+                {otherIncomes.map((o, i) => (
+                    <div key={i} className="flex gap-2 items-center mt-2">
+                        <input placeholder="Label (e.g., Freelance)" value={o.label} onChange={e => setOtherIncomes(otherIncomes.map((x,j)=> j===i ? {...x, label: e.target.value} : x))} className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                        <input placeholder="Amount (₹)" value={o.amount} onChange={e => setOtherIncomes(otherIncomes.map((x,j)=> j===i ? {...x, amount: e.target.value} : x))} className="w-40 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
+                        <button onClick={() => setOtherIncomes(otherIncomes.filter((_, idx) => idx !== i))} className="px-2 py-1 bg-red-500 text-white rounded">-</button>
+                    </div>
+                ))}
+                <div className="mt-2 flex gap-2">
+                    <button onClick={() => setOtherIncomes([...otherIncomes, { label: '', amount: '' }])} className="px-3 py-2 bg-indigo-500 text-white rounded-lg">+ Add Income</button>
+                    <div className="text-sm text-gray-500 self-center">Total available: <span className="font-semibold">₹{totalAvailable().toLocaleString('en-IN')}</span></div>
+                </div>
             </div>
 
             <div className="flex items-center gap-2">
@@ -387,15 +450,19 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 {allocations.map((a, i) => (
                     <div key={i} className="flex gap-2 items-center">
                         <input className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.label} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, label: e.target.value} : x))} />
-                        <input className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.percent} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, percent: e.target.value} : x))} />
+                        <select value={a.mode} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, mode: e.target.value as any} : x))} className="w-28 px-2 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                            <option value="percent">% (percent)</option>
+                            <option value="amount">₹ (amount)</option>
+                        </select>
+                        <input className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" value={a.value} onChange={e => setAllocations(allocations.map((x,j)=> j===i ? {...x, value: e.target.value} : x))} />
                         <button onClick={() => removeRow(i)} className="px-2 py-1 bg-red-500 text-white rounded">Remove</button>
                     </div>
                 ))}
             </div>
 
             <div>
-                <p className="text-sm">Total allocation: <span className={`font-semibold ${sumPercent === 100 ? 'text-green-600' : 'text-red-600'}`}>{sumPercent}%</span></p>
-                {sumPercent !== 100 && <p className="text-xs text-gray-500">It's okay if total is not 100 — planner will allocate according to provided percentages. For best results target 100%.</p>}
+                <p className="text-sm">Total percent allocations: <span className={`font-semibold ${sumPercent === 100 ? 'text-green-600' : 'text-red-600'}`}>{sumPercent}%</span></p>
+                {sumPercent !== 100 && <p className="text-xs text-gray-500">Percent-based rows sum to {sumPercent}%. Amount rows are treated as absolute values.</p>}
             </div>
 
             <div className="flex items-center gap-3">
@@ -406,13 +473,38 @@ const SalaryPlanner: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             </div>
 
             <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded">
-                <h4 className="font-semibold mb-2">Preview</h4>
-                {salary && allocations.map((a, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                        <div>{a.label}</div>
-                        <div>₹{Math.round(((parseFloat(salary || '0')) * (parseFloat(a.percent || '0') || 0) / 100)).toLocaleString('en-IN')}</div>
-                    </div>
-                ))}
+                <h4 className="font-semibold mb-2">Preview for {month}</h4>
+                {allocations.map((a, i) => {
+                    const avail = totalAvailable();
+                    const amount = a.mode === 'percent' ? Math.round((avail * (parseFloat(a.value || '0') || 0)) / 100) : Math.round(parseFloat(a.value || '0') || 0);
+                    return (
+                        <div key={i} className="flex justify-between text-sm">
+                            <div>{a.label}</div>
+                            <div>₹{amount.toLocaleString('en-IN')}{a.mode === 'percent' ? ` (${a.value}%)` : ''}</div>
+                        </div>
+                    );
+                })}
+                <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700 text-sm">
+                    <div className="flex justify-between"><div>Total Allocated</div><div className="font-semibold">₹{allocations.reduce((s,a)=> s + (a.mode === 'percent' ? Math.round((totalAvailable() * (parseFloat(a.value || '0') || 0)) / 100) : Math.round(parseFloat(a.value || '0') || 0)), 0).toLocaleString('en-IN')}</div></div>
+                    <div className="flex justify-between"><div>Total Income</div><div className="font-semibold">₹{totalAvailable().toLocaleString('en-IN')}</div></div>
+                    <div className="flex justify-between"><div>Remaining / Leftover</div><div className="font-semibold">₹{(totalAvailable() - allocations.reduce((s,a)=> s + (a.mode === 'percent' ? Math.round((totalAvailable() * (parseFloat(a.value || '0') || 0)) / 100) : Math.round(parseFloat(a.value || '0') || 0)), 0)).toLocaleString('en-IN')}</div></div>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+                <label className="text-sm">Month</label>
+                <input type="month" value={(() => {
+                    try {
+                        // convert "September 2025" -> 2025-09
+                        const d = new Date(month);
+                        const mm = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                        return mm;
+                    } catch (e) { return '' }
+                })()} onChange={e => {
+                    const [y,m] = e.target.value.split('-');
+                    const nm = new Date(Number(y), Number(m)-1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
+                    setMonth(nm);
+                }} className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg" />
             </div>
 
             <div className="flex justify-end gap-2">
